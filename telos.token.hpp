@@ -4,9 +4,9 @@
  */
 #pragma once
 
-#include <eosiolib/asset.hpp>
-#include <eosiolib/eosio.hpp>
-
+#include <eosio/asset.hpp>
+#include <eosio/eosio.hpp>
+#include <eosio/name.hpp>
 #include <string>
 
 namespace eosiosystem
@@ -19,73 +19,80 @@ namespace eosio
 
 using std::string;
 
-class token : public contract
+class [[eosio::contract("token")]] token : public contract
 {
     public:
-      token(account_name self) : contract(self) {}
+      using contract::contract;
 
-      void create(account_name issuer,
+      [[eosio::action]]
+      void create(name issuer,
                   asset maximum_supply);
 
-      void issue(account_name to, asset quantity, string memo);
+      [[eosio::action]]
+      void issue(name to, asset quantity, string memo);
 
+      [[eosio::action]]
       void retire(asset quantity, string memo);
 
-      void transfer(account_name from,
-                    account_name to,
+      [[eosio::action]]
+      void transfer(name from,
+                    name to,
                     asset quantity,
                     string memo);
 
-      void close(account_name owner, symbol_type symbol);
+      [[eosio::action]]
+      void close(name owner, symbol_code sym_code);
 
-      inline asset get_supply(symbol_name sym) const;
-
-      inline asset get_balance(account_name owner, symbol_name sym) const;
-
-    private:
+      [[eosio::table]]
       struct account
       {
             asset balance;
 
-            uint64_t primary_key() const { return balance.symbol.name(); }
+            uint64_t primary_key() const { return balance.symbol.code().raw(); }
       };
 
+      [[eosio::table]]
       struct currency_stats
       {
             asset supply;
             asset max_supply;
-            account_name issuer;
+            name issuer;
 
-            uint64_t primary_key() const { return supply.symbol.name(); }
+            uint64_t primary_key() const { return supply.symbol.code().raw(); }
       };
 
-      typedef eosio::multi_index<N(accounts), account> accounts;
-      typedef eosio::multi_index<N(stat), currency_stats> stats;
+      using accounts = eosio::multi_index<"accounts"_n, account>;
+      using stats = eosio::multi_index<"stat"_n, currency_stats>;
 
-      void sub_balance(account_name owner, asset value);
-      void add_balance(account_name owner, asset value, account_name ram_payer);
+      asset get_supply(symbol_code sym_code) const;
+
+      asset get_balance(name owner, symbol_code sym_code) const;
+
+    private:
+      void sub_balance(name owner, asset value);
+      void add_balance(name owner, asset value, name ram_payer);
 
     public:
       struct transfer_args
       {
-            account_name from;
-            account_name to;
+            name from;
+            name to;
             asset quantity;
             string memo;
       };
 };
 
-asset token::get_supply(symbol_name sym) const
+asset token::get_supply(symbol_code sym_code) const
 {
-      stats statstable(_self, sym);
-      const auto &st = statstable.get(sym);
+      stats statstable(get_self(), sym_code.raw());
+      const auto &st = statstable.get(sym_code.raw(), "symbol does not exist");
       return st.supply;
 }
 
-asset token::get_balance(account_name owner, symbol_name sym) const
+asset token::get_balance(name owner, symbol_code sym_code) const
 {
-      accounts accountstable(_self, owner);
-      const auto &ac = accountstable.get(sym);
+      accounts accountstable(get_self(), owner.value);
+      const auto &ac = accountstable.get(sym_code.raw(), "no balance object found");
       return ac.balance;
 }
 
